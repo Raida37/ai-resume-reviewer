@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import axios from "axios";
 
 dotenv.config();
 
@@ -9,8 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
+// /analyze endpoint
 app.post("/analyze", async (req, res) => {
   try {
     const { resumeText, jobText } = req.body;
@@ -18,8 +17,6 @@ app.post("/analyze", async (req, res) => {
     if (!resumeText) {
       return res.status(400).json({ error: "Resume text is required" });
     }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
     const prompt = `
 You are a professional AI career coach.
@@ -38,18 +35,31 @@ ${resumeText}
 ${jobText ? `Job Description:\n${jobText}` : ""}
 `;
 
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
+    // Call Gemini API via REST using axios
+    const response = await axios.post(
+      "https://generative.googleapis.com/v1beta2/models/text-bison-001:generate",
+      {
+        prompt,
+        temperature: 0.7
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${process.env.GEMINI_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
 
-    res.json({ feedback: response });
+    // Return AI feedback
+    res.json({ feedback: response.data });
+
   } catch (error) {
-    console.error(error);
+    console.error(error.response?.data || error.message);
     res.status(500).json({ error: "Gemini API failed" });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
