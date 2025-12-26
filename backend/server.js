@@ -1,24 +1,40 @@
+// ------------------------------
+// server.js - AI Resume Reviewer Backend
+// Fully corrected for Gemini 2.0 Flash API
+// ------------------------------
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
 
+// Load environment variables from .env
 dotenv.config();
 
+// Initialize Express app
 const app = express();
+
+// Enable CORS so frontend can access backend
 app.use(cors());
+
+// Parse JSON bodies
 app.use(express.json());
 
-// /analyze endpoint
+// ------------------------------
+// POST /analyze
+// Accepts resumeText and optional jobText
+// Calls Gemini 2.0 Flash API for AI feedback
+// ------------------------------
 app.post("/analyze", async (req, res) => {
   try {
     const { resumeText, jobText } = req.body;
 
-    if (!resumeText) {
+    if (!resumeText || resumeText.trim() === "") {
       return res.status(400).json({ error: "Resume text is required" });
     }
 
-    const prompt = `
+    // Build prompt for AI
+    const promptText = `
 You are a professional AI career coach.
 
 Analyze the resume below and return:
@@ -35,30 +51,43 @@ ${resumeText}
 ${jobText ? `Job Description:\n${jobText}` : ""}
 `;
 
-    // Call Gemini API via REST using axios
+    // Call Gemini 2.0 Flash API
     const response = await axios.post(
-      "https://generative.googleapis.com/v1beta2/models/text-bison-001:generate",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
       {
-        prompt,
-        temperature: 0.7
+        contents: [
+          {
+            parts: [
+              {
+                text: promptText
+              }
+            ]
+          }
+        ]
       },
       {
         headers: {
-          "Authorization": `Bearer ${process.env.GEMINI_API_KEY}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "X-goog-api-key": process.env.GEMINI_API_KEY
         }
       }
     );
 
-    // Return AI feedback
-    res.json({ feedback: response.data });
+    // Extract AI response text safely
+    const aiText = response.data?.results?.[0]?.content?.[0]?.text || "No response from Gemini";
+
+    // Send feedback to frontend
+    res.json({ feedback: aiText });
 
   } catch (error) {
-    console.error(error.response?.data || error.message);
+    console.error("Gemini API Error:", error.response?.data || error.message);
     res.status(500).json({ error: "Gemini API failed" });
   }
 });
 
+// ------------------------------
+// Start server
+// ------------------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
